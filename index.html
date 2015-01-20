@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>three.js webgl - geometry - cube</title>
+		<meta charset="utf-8">
+		<style>
+			* {cursor: none;}
+			body {
+				margin: 0px;
+				background-color: #000000;
+				overflow: hidden;
+			}
+		</style>
+	</head>
+	<body>
+
+		<script src="js/three.min.js"></script>
+
+		<script>
+
+			var camera, scene, renderer;
+			var paddle, ball;
+			var mouseX = 0;
+			var oldTime = 0;
+			var gameWidth = 300, gameHeight = 220;
+			var testBlocks = [];
+
+			init();
+			animate(0);
+
+			function init() {
+
+				renderer = new THREE.WebGLRenderer();
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				document.body.appendChild( renderer.domElement );
+
+				//
+
+				camera = new THREE.PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 1, 1000 );
+				camera.position.x = 0;
+				camera.position.y = 0;
+				camera.position.z = 200;
+
+				scene = new THREE.Scene();
+
+
+				var borderMaterial = new THREE.MeshLambertMaterial( { color: 0x999999 } );
+
+				var topBorderGeometry = new THREE.BoxGeometry( 300, 5, 5 );
+				var topBorderMesh = new THREE.Mesh( topBorderGeometry, borderMaterial );
+				topBorderMesh.position.set(0, gameHeight/2, 0);
+				scene.add( topBorderMesh );
+
+				var btmBorderGeometry = new THREE.BoxGeometry( 300, 5, 5 );
+				var btmBorderMesh = new THREE.Mesh( btmBorderGeometry, borderMaterial );
+				btmBorderMesh.position.set(0, -gameHeight/2, 0);
+				scene.add( btmBorderMesh );
+
+				var leftBorderGeometry = new THREE.BoxGeometry( 5, 225, 5 );
+				var leftBorderMesh = new THREE.Mesh( leftBorderGeometry, borderMaterial );
+				leftBorderMesh.position.set(-gameWidth/2, 0, 0);
+				scene.add( leftBorderMesh );
+
+				var rightBorderGeometry = new THREE.BoxGeometry( 5, 225, 5 );
+				var rightBorderMesh = new THREE.Mesh( rightBorderGeometry, borderMaterial );
+				rightBorderMesh.position.set(gameWidth/2, 0, 0);
+				scene.add( rightBorderMesh );
+
+				paddle = new Paddle();
+
+				ball = new Ball(0, -82);
+
+				// Create test blocks
+				for (var x=0; x < 14; x++) {
+					testBlocks[x] = new Array(12);
+					for (var y=0; y < 12; y++) {
+						testBlocks[x][y] = new Block(x, y, 0x000099);
+					}
+				}
+
+				var light = new THREE.PointLight( 0xffffff, 4, 400 );
+				light.position.set( 0, 0, 200 );
+				scene.add( light );
+
+				//
+
+				window.addEventListener( 'resize', onWindowResize, false );
+
+				document.addEventListener( 'mousemove', onMouseMove, false );
+				document.addEventListener( 'click', onMouseClick, false );
+			}
+
+			function onWindowResize() {
+
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+
+				renderer.setSize( window.innerWidth, window.innerHeight );
+
+			}
+
+			function onMouseMove(e) {
+				mouseX = (e.clientX - window.innerWidth/2)/3;
+				if (mouseX < -132) mouseX = -132;
+				if (mouseX > 132) mouseX = 132;
+			}
+
+			function onMouseClick(e) {
+				if (ball.onPaddle) {
+					ball.launch();
+					scene.remove(paddle.line);
+				}
+			}
+
+			function animate(time) {
+				requestAnimationFrame( animate );
+
+				var deltaTime = time - oldTime;
+
+				// Move paddle
+				paddle.setXPos(mouseX);
+				if (ball.onPaddle) {
+					paddle.moveBallWithPaddle(mouseX, deltaTime);
+				} else {
+					ball.move(deltaTime);
+				}
+
+				oldTime = time;
+
+				renderer.render( scene, camera );
+			}
+
+			function Paddle() {
+				this.width = 40;
+				this.height = 5;
+				this.lineAngleChange = 16*.0025;
+
+				var geometry = new THREE.BoxGeometry( this.width, this.height, 5 );
+				var material = new THREE.MeshLambertMaterial( { color: 0x006600, transparent:true, opacity:.75 } );
+				this.mesh = new THREE.Mesh( geometry, material );
+				this.mesh.position.set(0, -90, 0);
+				scene.add( this.mesh );
+
+				// Guideline
+				var material = new THREE.LineBasicMaterial({color: 0x0000ff, linewidth:2});
+				var geometry = new THREE.Geometry();
+				geometry.vertices.push(
+					new THREE.Vector3( 0, 0, 0 ),
+					new THREE.Vector3( 30, 0, 0 )
+				);
+				this.line = new THREE.Line( geometry, material );
+				this.line.position.y = -85;
+				this.line.rotateOnAxis(new THREE.Vector3(0, 0, 1), Math.PI/2);
+				scene.add( this.line );
+
+				this.getXPos = function() {
+					return this.mesh.position.x;
+				}
+
+				this.setXPos = function(x) {
+					this.mesh.position.x = x;
+				}
+
+				this.getYPos = function() {
+					return this.mesh.position.y;
+				}
+
+				this.moveBallWithPaddle = function(mouseX, deltaTime) {
+					ball.setXPos(mouseX)
+					this.line.position.x = mouseX;
+
+					if ( this.line.rotation._z < Math.PI/12 ) {
+						this.lineAngleChange = deltaTime*.0025;
+					} else if (this.line.rotation._z > (11/12)*Math.PI) {
+						this.lineAngleChange = -deltaTime*.0025;
+					}
+
+					this.line.rotateOnAxis(new THREE.Vector3(0, 0, 1), this.lineAngleChange);
+				}
+			}
+
+			function Ball(x, y) {
+				this.onPaddle = true;
+
+				var geometry = new THREE.SphereGeometry( 5, 12, 8 );
+				var material = new THREE.MeshLambertMaterial( { color:0x990000 } );
+
+				this.mesh = new THREE.Mesh( geometry, material );
+				this.mesh.position.x = x;
+				this.mesh.position.y = y;
+				this.mesh.position.z = 0;
+				scene.add( this.mesh );
+
+				this.light = new THREE.PointLight( 0xffffff, 6, 150 );
+				this.light.position.set( x, y, 0 );
+				scene.add( this.light );
+
+				this.getXPos = function() {
+					return this.mesh.position.x;
+				}
+
+				this.setXPos = function(x) {
+					this.mesh.position.x = x;
+					this.light.position.x = x;
+				}
+
+				this.getYPos = function() {
+					return this.mesh.position.y;
+				}
+
+				this.setPosition = function(x,y) {
+					this.mesh.position.set(x,y,0);
+					this.light.position.set(x,y,0);
+				}
+
+				this.launch = function() {
+					this.onPaddle = false;
+					this.angle = paddle.line.rotation._z;
+					this.speed = 2.5;
+					this.velocity = { x: Math.cos(this.angle) * this.speed, y: Math.sin(this.angle) * this.speed }
+				}
+
+				this.move = function(deltaTime) {
+					var newX, newY;
+					var halfPaddleWidth = paddle.width/2;
+
+					newX = this.getXPos() + this.velocity.x;
+					newY = this.getYPos() + this.velocity.y;
+
+					// Check for border collisions
+					if (newX > gameWidth/2 - 5) {
+						this.velocity.x = -this.velocity.x;
+						newX = gameWidth - newX - 10;
+					} else if (newX < -gameWidth/2 + 5) {
+						this.velocity.x = -this.velocity.x;
+						newX = -gameWidth - newX + 10;
+					}
+					if (newY > gameHeight/2 - 5) {
+						this.velocity.y = -this.velocity.y;
+						var yDiff = newY - (gameHeight/2 - 5);
+						newY = gameHeight/2 - 5 - yDiff;
+					}
+					// Check for paddle collision
+					else if ( newY <= paddle.getYPos() + paddle.height/2 && newY >= paddle.getYPos() - paddle.height/2 ) {
+						if (newX > paddle.getXPos() - halfPaddleWidth && newX < paddle.getXPos() + halfPaddleWidth) {
+							var hitX = (newX - (paddle.mesh.position.x - halfPaddleWidth)) / paddle.width;
+							this.angle = (11/12)*Math.PI - hitX*(10/12)*Math.PI;
+							this.velocity = { x: Math.cos(this.angle) * this.speed, y: Math.sin(this.angle) * this.speed }
+							newX = this.getXPos() + this.velocity.x;
+							newY = this.getYPos() + this.velocity.y;
+						}
+					}
+
+					// Check for block collisions
+					// translate ball position to block coordinates
+					var blockX = Math.round((newX + 137)/21);
+					var blockY = Math.round(-(newY - 101.5)/11);
+
+					var m = (this.velocity.y / this.velocity.x);
+
+					if (blockX >= 0 && blockX < 14 && blockY >= 0 && blockY < 12) {
+						if (testBlocks[blockX][blockY].alive) {
+
+							var blockLeftX = testBlocks[blockX][blockY].getXPos() - 10;
+							var blockRightX = testBlocks[blockX][blockY].getXPos() + 10;
+
+							if (this.velocity.y > 0) {
+								var b = this.getYPos() + 5 - m * this.getXPos();
+								var blockBtmY = testBlocks[blockX][blockY].getYPos() - 5;
+								var hitX = (blockBtmY - b)/m;
+
+								if (hitX + 5 >= blockLeftX && hitX - 5 <= blockRightX) {
+									// hit bottom side
+									testBlocks[blockX][blockY].remove();
+									this.velocity.y = -this.velocity.y;
+									var diffY = newY - blockBtmY;
+									newY = 2*blockBtmY - newY;
+								}
+
+								if (this.velocity.x > 0) {
+									// Could hit bottom or left side
+									
+								} else {
+									// Could hit bottom or right side
+								}
+							} else {
+								if (this.velocity.x > 0) {
+									// Could hit top or left side
+								} else {
+									// Could hit top or right side
+								}
+							}
+							testBlocks[blockX][blockY].changeColor(0x009900);
+						}
+					}
+
+					this.setPosition(newX, newY);
+				}
+			}
+
+			function Block(x, y, color) {
+				this.alive = true;
+
+				var xPos = x * 21 - 137;
+				var yPos = -y * 11 + 101.5;
+
+				var geometry = new THREE.BoxGeometry( 20, 10, 5 );
+				var material = new THREE.MeshLambertMaterial( {color:color, transparent:true, opacity:.75 } );
+
+				this.mesh = new THREE.Mesh( geometry, material );
+				this.mesh.position.x = xPos;
+				this.mesh.position.y = yPos;
+				this.mesh.position.z = 0;
+				scene.add( this.mesh );
+
+				this.changeColor = function(newColor) {
+					this.mesh.material.color.setHex(newColor);
+				}
+
+				this.getXPos = function() {
+					return this.mesh.position.x;
+				}
+
+				this.getYPos = function() {
+					return this.mesh.position.y;
+				}
+
+				this.remove = function() {
+					scene.remove( this.mesh );
+					this.alive = false;
+				}
+			}
+
+		</script>
+
+	</body>
+</html>
